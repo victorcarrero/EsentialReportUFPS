@@ -1,0 +1,4 @@
+com\esentialreportufps\Controllers\IndexControler.class
+com\esentialreportufps\Controllers\ProcesarArchivoController.class
+com\esentialreportufps\valueobjects\ColumnaVO.class
+com\esentialreportufps\Controllers\SubirArchivoController.class
