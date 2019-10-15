@@ -5,13 +5,16 @@
  */
 package com.esentialreportufps.controllers;
 
+import com.esentialreportufps.fachada.FachadaEsentialReport;
 import com.esentialreportufps.valueobjects.ColumnaVO;
+import com.google.gson.JsonArray;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -30,10 +33,12 @@ import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.formula.functions.Column;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.jfree.chart.renderer.xy.ClusteredXYBarRenderer;
 
 /**
  *
@@ -96,6 +101,7 @@ public class SubirArchivoController extends HttpServlet {
         try {
             String rutaArchivo = "";
             HttpSession session = request.getSession();
+            String nombreArchivo = "";
 
             try {
                 FileItemFactory factory = new DiskFileItemFactory();
@@ -114,6 +120,7 @@ public class SubirArchivoController extends HttpServlet {
                     // Hay que comprobar si es un campo de formulario. Si no lo es, se guarda el fichero
                     // subido donde nos interese
                     if (!uploaded.isFormField()) {
+                        nombreArchivo = uploaded.getName().substring(0, uploaded.getName().indexOf(".")); 
                         // No es campo de formulario, guardamos el fichero en algún sitio
                         File fichero = new File(uploadPath, uploaded.getName());
                         rutaArchivo = fichero.getAbsolutePath();
@@ -133,9 +140,17 @@ public class SubirArchivoController extends HttpServlet {
                 Logger.getLogger(SubirArchivoController.class.getName()).log(Level.SEVERE, null, ex);
             }
             session.setAttribute("rutaArchivo", rutaArchivo);
-            request.setAttribute("columnasFiltrables", listarColumnasFiltrables(rutaArchivo));
-            request.getRequestDispatcher("vistas/sel_fil_rep.jsp").forward(request, response);
+            session.setAttribute("columnasFiltrables", listarColumnasFiltrables(rutaArchivo));
+            String codigoCreacion = (String) session.getAttribute("codigo");
+            List<ArrayList<ColumnaVO>> informacionTabla = listarInformacionTabla(rutaArchivo);
+            boolean insercionTabla = FachadaEsentialReport.validarTabla(informacionTabla, codigoCreacion, nombreArchivo);
+            JsonArray datosFile = FachadaEsentialReport.extraerInformacionFile(rutaArchivo);
+            boolean registrarDatosFile = FachadaEsentialReport.registrarInformacionFile(datosFile, nombreArchivo.replace(" ", "_") + codigoCreacion);
+            
+            response.getWriter().print("sel_fil_rep.jsp");
         } catch (InvalidFormatException ex) {
+            Logger.getLogger(SubirArchivoController.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SQLException ex) {
             Logger.getLogger(SubirArchivoController.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
@@ -171,6 +186,53 @@ public class SubirArchivoController extends HttpServlet {
             }
         }
         return nombreColumnas;
+    }
+
+    public List<ArrayList<ColumnaVO>> listarInformacionTabla(String ruta) throws IOException, InvalidFormatException {
+        InputStream excelStream = null;
+        List<ArrayList<ColumnaVO>> columnasTabla = new ArrayList<ArrayList<ColumnaVO>>();
+        try {
+            excelStream = new FileInputStream(new File(ruta));
+            Workbook workbook = WorkbookFactory.create(excelStream);
+            Sheet sheet = workbook.getSheetAt(0);
+            Cell cell;
+            int fila = 0;
+            while (fila < 2) {
+                Row row = sheet.getRow(fila);
+                Column column;
+                ArrayList<ColumnaVO> informacionTabla = new ArrayList<ColumnaVO>();
+                for (int i = 0; i < row.getLastCellNum(); i++) {
+                    cell = row.getCell(i);
+                    if (cell != null) {
+                        if (cell.getCellTypeEnum() == CellType.NUMERIC) {
+                            cell.setCellType(CellType.STRING);
+                            ColumnaVO columnaVO = new ColumnaVO();
+                            columnaVO.setIdColumna(i);
+                            columnaVO.setNombreColumna(cell.getStringCellValue());
+                            informacionTabla.add(columnaVO);
+                        } else if (cell.getCellTypeEnum() == CellType.STRING) {
+                            ColumnaVO columnaVO = new ColumnaVO();
+                            columnaVO.setIdColumna(i);
+                            columnaVO.setNombreColumna(cell.getRichStringCellValue().getString());
+                            informacionTabla.add(columnaVO);
+                        }
+                    }
+                }
+                columnasTabla.add(informacionTabla);
+                fila++;
+            }
+        } catch (FileNotFoundException ex) {
+        } catch (org.apache.poi.openxml4j.exceptions.InvalidFormatException ex) {
+            Logger.getLogger(SubirArchivoController.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (EncryptedDocumentException ex) {
+            Logger.getLogger(SubirArchivoController.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                excelStream.close();
+            } catch (IOException ex) {
+            }
+        }
+        return columnasTabla;
     }
 
     /**

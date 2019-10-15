@@ -13,6 +13,7 @@ public class ColumnaVO {
     
     private int idColumna;
     private String nombreColumna; 
+    private int tipoColumna;
 
     public ColumnaVO() {
         
@@ -36,6 +37,14 @@ public class ColumnaVO {
 
     public void setNombreColumna(String nombreColumna) {
         this.nombreColumna = nombreColumna;
+    }
+
+    public int getTipoColumna() {
+        return tipoColumna;
+    }
+
+    public void setTipoColumna(int tipoColumna) {
+        this.tipoColumna = tipoColumna;
     }
     
     
